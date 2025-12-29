@@ -3,16 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grokの目つきスネークゲーム</title>
+    <title>Grokの目つきスネークゲーム（修正版）</title>
     <style>
-        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #222; color: #fff; font-family: Arial; }
-        canvas { border: 2px solid #fff; background: #000; }
-        #score { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 24px; }
+        body { 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            background: linear-gradient(135deg, #222, #444); 
+            color: #fff; 
+            font-family: 'Arial', sans-serif; 
+            user-select: none;
+        }
+        canvas { 
+            border: 3px solid #fff; 
+            background: #000; 
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,255,0,0.5);
+        }
+        #score { 
+            font-size: 28px; 
+            font-weight: bold; 
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #0f0;
+        }
+        #gameOver { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            background: rgba(0,0,0,0.9); 
+            padding: 30px; 
+            border-radius: 15px; 
+            text-align: center; 
+            display: none;
+            border: 2px solid #f00;
+        }
+        button { 
+            background: #0f0; 
+            color: #000; 
+            border: none; 
+            padding: 12px 24px; 
+            font-size: 18px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            margin: 10px;
+            font-weight: bold;
+        }
+        button:hover { background: #0a0; }
+        #instructions {
+            margin-top: 20px;
+            font-size: 14px;
+            opacity: 0.8;
+            text-align: center;
+            max-width: 400px;
+        }
     </style>
 </head>
 <body>
     <div id="score">Score: 0</div>
     <canvas id="game" width="400" height="400"></canvas>
+    <div id="instructions">
+        矢印キー or WASD で操作 | 右向きスタート！ 餌食って成長せよ🐍
+    </div>
+    <div id="gameOver">
+        <h2>🐍 Game Over! 🐍</h2>
+        <p>最終スコア: <span id="finalScore">0</span></p>
+        <button onclick="restart()">もう一度遊ぶ</button>
+        <button onclick="shareScore()">スコア共有</button>
+    </div>
+
     <script>
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
@@ -20,65 +82,125 @@
         const size = canvas.width / grid;
 
         let snake = [{x: 10, y: 10}];
-        let food = {x: Math.floor(Math.random() * grid), y: Math.floor(Math.random() * grid)};
-        let dx = 0, dy = 0;
+        let food = getRandomFood();
+        let dx = 1, dy = 0;  // ← 修正！ 右向きスタート
         let score = 0;
+        let gameRunning = true;
 
-        // キー入力
+        function getRandomFood() {
+            let fx, fy;
+            do {
+                fx = Math.floor(Math.random() * grid);
+                fy = Math.floor(Math.random() * grid);
+            } while (snake.some(s => s.x === fx && s.y === fy));
+            return {x: fx, y: fy};
+        }
+
+        // キー入力（WASDも追加）
         document.addEventListener('keydown', e => {
-            if (e.key === 'ArrowUp' && dy === 0) { dx = 0; dy = -1; }
-            if (e.key === 'ArrowDown' && dy === 0) { dx = 0; dy = 1; }
-            if (e.key === 'ArrowLeft' && dx === 0) { dx = -1; dy = 0; }
-            if (e.key === 'ArrowRight' && dx === 0) { dx = 1; dy = 0; }
+            if (!gameRunning) return;
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { if (dy === 0) { dx = 0; dy = -1; } }
+            if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { if (dy === 0) { dx = 0; dy = 1; } }
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { if (dx === 0) { dx = -1; dy = 0; } }
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { if (dx === 0) { dx = 1; dy = 0; } }
         });
 
         function drawSnake() {
             snake.forEach((part, i) => {
-                ctx.fillStyle = i === 0 ? '#0f0' : '#080'; // 頭緑、体暗緑
-                ctx.fillRect(part.x * size, part.y * size, size, size);
-                // 目！（頭だけ）
+                ctx.fillStyle = i === 0 ? '#0ff' : '#08f';  // 頭水色、体青
+                ctx.fillRect(part.x * size, part.y * size, size-1, size-1);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(part.x * size, part.y * size, size-1, size-1);
+                // 目！（頭だけ、キラキラ）
                 if (i === 0) {
+                    const eyeSize = 3;
                     ctx.fillStyle = '#fff';
-                    ctx.fillRect(part.x * size + 2, part.y * size + 2, 4, 4);
-                    ctx.fillRect(part.x * size + size - 6, part.y * size + 2, 4, 4);
+                    ctx.beginPath();
+                    ctx.arc(part.x * size + size/4, part.y * size + size/4, eyeSize, 0, Math.PI*2);
+                    ctx.arc(part.x * size + size*3/4, part.y * size + size/4, eyeSize, 0, Math.PI*2);
+                    ctx.fill();
                     ctx.fillStyle = '#000';
-                    ctx.fillRect(part.x * size + 3, part.y * size + 3, 2, 2);
-                    ctx.fillRect(part.x * size + size - 5, part.y * size + 3, 2, 2);
+                    ctx.beginPath();
+                    ctx.arc(part.x * size + size/4 +1, part.y * size + size/4 +1, 1, 0, Math.PI*2);
+                    ctx.arc(part.x * size + size*3/4 +1, part.y * size + size/4 +1, 1, 0, Math.PI*2);
+                    ctx.fill();
                 }
             });
         }
 
         function drawFood() {
-            ctx.fillStyle = '#f00';
-            ctx.fillRect(food.x * size, food.y * size, size, size);
+            ctx.fillStyle = '#ff0';
+            ctx.beginPath();
+            ctx.arc(food.x * size + size/2, food.y * size + size/2, size/2 -1, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#f80';
+            ctx.beginPath();
+            ctx.arc(food.x * size + size/2, food.y * size + size/2, size/4, 0, Math.PI*2);
+            ctx.fill();
         }
 
         function update() {
             const head = {x: snake[0].x + dx, y: snake[0].y + dy};
-            // 壁/自分衝突
-            if (head.x < 0 || head.x >= grid || head.y < 0 || head.y >= grid || snake.some(s => s.x === head.x && s.y === head.y)) {
-                alert('Game Over! Score: ' + score);
-                location.reload();
+            // 壁 or 体衝突
+            if (head.x < 0 || head.x >= grid || head.y < 0 || head.y >= grid || 
+                snake.slice(1).some(s => s.x === head.x && s.y === head.y)) {  // 頭以外と衝突
+                gameOver();
+                return;
             }
             snake.unshift(head);
-            // 餌食う
             if (head.x === food.x && head.y === food.y) {
                 score++;
                 document.getElementById('score').textContent = 'Score: ' + score;
-                food = {x: Math.floor(Math.random() * grid), y: Math.floor(Math.random() * grid)};
+                food = getRandomFood();
             } else {
                 snake.pop();
             }
         }
 
         function gameLoop() {
+            if (!gameRunning) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             update();
             drawSnake();
             drawFood();
-            setTimeout(gameLoop, 150);
+            setTimeout(gameLoop, 120);
         }
+
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+
+        function restart() {
+            snake = [{x: 10, y: 10}];
+            food = getRandomFood();
+            dx = 1; dy = 0;
+            score = 0;
+            gameRunning = true;
+            document.getElementById('score').textContent = 'Score: 0';
+            document.getElementById('gameOver').style.display = 'none';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            gameLoop();
+        }
+
+        function shareScore() {
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Grokスネーク 高スコア！',
+                    text: `Score: ${score}！ Manusより芸細かい目つき蛇🐍`,
+                    url: window.location.href
+                });
+            } else {
+                alert(`スコア: ${score}！ 友達に自慢してね😂`);
+            }
+        }
+
+        // スタート！
         gameLoop();
     </script>
+</body>
+</html>
 </body>
 </html>
